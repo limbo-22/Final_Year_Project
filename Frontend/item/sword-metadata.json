@@ -1,0 +1,19 @@
+{
+  "name": "Legendary Sword",
+  "description": "A powerful blade found deep within the dungeon. Grants strength to the wielder.",
+  "image": "ipfs://bafkreigp34rgox7huisjffvylutht6xorptg2tpdw2zi75ntxlgw5x4dae",
+  "attributes": [
+    {
+      "trait_type": "Power",
+      "value": 100
+    },
+    {
+      "trait_type": "Rarity",
+      "value": "Epic"
+    },
+    {
+      "trait_type": "Origin",
+      "value": "Dungeon"
+    }
+  ]
+}

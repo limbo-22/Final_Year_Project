@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Text Adventure Game</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.2/dist/ethers.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #111; color: #eee; padding: 20px; }
+    #game-box { border: 1px solid #555; padding: 20px; max-width: 600px; margin: auto; background: #222; }
+    button { margin-top: 10px; padding: 10px; background: #333; color: #eee; border: none; cursor: pointer; }
+    button:hover { background: #444; }
+  </style>
+</head>
+<body>
+  <div id="game-box">
+    <h2>Find the Lost Sword</h2>
+
+    <p id="wallet-status">Not connected</p>
+    <p id="game-text">Loading...</p>
+
+    <button onclick="connectWallet()">🔗 Connect Wallet</button>
+    <button onclick="goNorth()">➡️ Go North</button>
+    <button onclick="pickUpSword()">🗡 Pick Up Sword</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
