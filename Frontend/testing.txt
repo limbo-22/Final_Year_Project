@@ -1,0 +1,24 @@
+management of the asset
+
+build framework of building other games for other people easily.
+
+create IPFS. (find address of a object)
+
+different assets of fungible/ non-fungible Coin/weapon.
+
+ecosystem: framework of managing a game assets owned by a user of the game!
+
+management assets: see that the user has a sword, do it very easy!
+
+Create an asset server to build up objects!
+
+wrap it into high level!
+
+flask: building a python backend server 
+
+Users' token contracts must be deployed by the management interface.
+
+web3.py
+
+Overleaf: technical architeture.
+
