@@ -54,7 +54,17 @@ async function mintSwordNFT() {
     const contract = new ethers.Contract(swordNFTAddress, abi, signer);
     const address = await signer.getAddress();
 
-    const metadataURI = "ipfs://bafkreidbhnkh6o5t6emazn3iilpewwrcgg5onqt77pj3dcwi6jpqrbbjmm";
+    //  Fetch metadata URI from Flask backend
+    const response = await fetch("http://localhost:5000/mint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item: "sword", user: address })
+    });
+
+    const result = await response.json();
+    const metadataURI = result.metadata_uri;
+
+    //  Mint with dynamic URI
     const tx = await contract.safeMint(address, metadataURI);
     await tx.wait();
 
