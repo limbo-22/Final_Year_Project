@@ -62,7 +62,12 @@ async function mintSwordNFT() {
     });
 
     const result = await response.json();
+
+
     const metadataURI = result.metadata_uri;
+
+    //  Add this line to check the URI returned by Flask
+    console.log("Metadata URI from Flask:", metadataURI);
 
     //  Mint with dynamic URI
     const tx = await contract.safeMint(address, metadataURI);
