@@ -3,7 +3,12 @@ let hasMintedSword = false;
 let provider;
 let signer;
 
-const swordNFTAddress = "0x9f64932be34d5d897c4253d17707b50921f372b6";
+const nftContracts = {
+  sword: "0x9f64932be34d5d897c4253d17707b50921f372b6",
+  potion: "0x9f64932be34d5d897c4253d17707b50921f372b6",
+  gem: "0x9f64932be34d5d897c4253d17707b50921f372b6"
+};
+
 const abi = [
   {
     "inputs": [
@@ -34,53 +39,64 @@ function goNorth() {
   }
 }
 
-function pickUpSword() {
-  if (currentRoom === "NorthRoom" && !hasMintedSword) {
-    mintSwordNFT();
-  } else if (hasMintedSword) {
+function pickUpItem(itemType) {
+  if (itemType === "sword" && currentRoom === "NorthRoom" && !hasMintedSword) {
+    mintItem("sword");
+  } else if (itemType === "sword" && hasMintedSword) {
     alert("You already picked up the sword!");
+  } else {
+    mintItem(itemType); // for other items like "potion", "gem"
   }
 }
 
 
 
-async function mintSwordNFT() {
+async function mintItem(itemType) {
   try {
     if (!signer) {
       alert("Please connect your wallet first.");
       return;
     }
 
-    const contract = new ethers.Contract(swordNFTAddress, abi, signer);
     const address = await signer.getAddress();
 
-    //  Fetch metadata URI from Flask backend
-    const response = await fetch("http://localhost:5000/mint", {
+    // 🔄 Fetch metadata from Flask
+    const response = await fetch(`http://localhost:5000/mint/${itemType}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ item: "sword", user: address })
+      body: JSON.stringify({ user: address })
     });
 
+    
+  if (!response.ok) {
+    const errorText = await response.text(); // to inspect backend response
+    console.error("Flask error response:", errorText);
+    alert(`Backend error: ${response.status}`);
+    return;
+  }
+
+
     const result = await response.json();
-
-
     const metadataURI = result.metadata_uri;
+    console.log(`${itemType} metadata URI:`, metadataURI);
 
-    //  Add this line to check the URI returned by Flask
-    console.log("Metadata URI from Flask:", metadataURI);
+    // 🧾 Use the correct contract
+    const contractAddress = nftContracts[itemType];
+    const contract = new ethers.Contract(contractAddress, abi, signer);
 
-    //  Mint with dynamic URI
     const tx = await contract.safeMint(address, metadataURI);
     await tx.wait();
 
-    hasMintedSword = true;
-    alert("Sword minted to your wallet!");
+    alert(`${itemType} NFT minted to your wallet!`);
+    if (itemType === "sword") hasMintedSword = true;
     displayRoom();
+
   } catch (err) {
-    console.error("Mint failed", err);
-    alert("Minting failed. Check console.");
+    console.error("Mint failed:", err);
+    alert("Minting failed. See console.");
   }
 }
+
 
 async function connectWallet() {
   if (window.ethereum) {
