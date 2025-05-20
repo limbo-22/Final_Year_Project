@@ -20,14 +20,15 @@
     <p id="wallet-status">Not connected</p>
     <p id="game-text">Loading...</p>
 
-    <button onclick="connectWallet()">🔗 Connect Wallet</button>
-    <button onclick="goNorth()">➡️ Go North</button>
-    <button onclick="pickUpItem('sword')">🗡️ Pick Up Sword</button>
-    <button onclick="pickUpItem('potion')">🧪 Drink Potion</button>
-    <button onclick="pickUpItem('gem')">💎 Grab Gem</button>
-
+    <!-- All buttons must explicitly be type="button" to prevent form submission -->
+    <button type="button" onclick="connectWallet()">🔗 Connect Wallet</button>
+    <button type="button" onclick="goNorth()">➡️ Go North</button>
+    <button type="button" onclick="pickUpItem('sword')">🗡️ Pick Up Sword</button>
+    <button type="button" onclick="pickUpItem('potion')">🧪 Drink Potion</button>
+    <button type="button" onclick="pickUpItem('gem')">💎 Grab Gem</button>
   </div>
 
+  <!-- Ensure the game's logic file loads after the DOM -->
   <script src="game.js"></script>
 </body>
 </html>

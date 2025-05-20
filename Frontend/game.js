@@ -53,14 +53,20 @@ function pickUpItem(itemType) {
 
 async function mintItem(itemType) {
   try {
+
+    console.log(`Attempting to mint item: ${itemType}`);
+
     if (!signer) {
       alert("Please connect your wallet first.");
       return;
     }
 
     const address = await signer.getAddress();
+    console.log("Connected wallet address:", address);
+
 
     // 🔄 Fetch metadata from Flask
+    console.log("Sending POST to backend...");
     const response = await fetch(`http://localhost:5000/mint/${itemType}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -71,7 +77,7 @@ async function mintItem(itemType) {
   if (!response.ok) {
     const errorText = await response.text(); // to inspect backend response
     console.error("Flask error response:", errorText);
-    alert(`Backend error: ${response.status}`);
+    alert(`Backend error (${response.status}): ${errorText}`);
     return;
   }
 
@@ -84,8 +90,13 @@ async function mintItem(itemType) {
     const contractAddress = nftContracts[itemType];
     const contract = new ethers.Contract(contractAddress, abi, signer);
 
+    console.log("Calling safeMint on contract...");
     const tx = await contract.safeMint(address, metadataURI);
+    console.log("Transaction sent. Hash:", tx.hash);
+
+
     await tx.wait();
+     console.log("Transaction confirmed!");
 
     alert(`${itemType} NFT minted to your wallet!`);
     if (itemType === "sword") hasMintedSword = true;
