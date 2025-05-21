@@ -19,7 +19,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # In-memory inventory store
 # ------------------------
 # Maps lowercase wallet addresses to a list of minted item types
-user_items = {}
+user_items = {
+    #     { "item": "sword",  "metadata_uri": "ipfs://..." }
+}
 
 # ------------------------
 # Helper Functions
@@ -142,9 +144,10 @@ def mint_item(item_type):
     # Initialize inventory list if first time
     if addr not in user_items:
         user_items[addr] = []
+        
 
     # Prevent duplicates
-    if item_type in user_items[addr]:
+    if addr in user_items and any(e["item"] == item_type for e in user_items[addr]):
         return jsonify({"error": f"{item_type} already minted"}), 400
 
     # Load template
@@ -161,8 +164,11 @@ def mint_item(item_type):
     # Upload metadata JSON
     metadata_uri = upload_json_to_pinata(item_data, item_type)
 
-    # Record the mint in inventory
-    user_items[addr].append(item_type)
+    # 📦 record the mint with its metadata URI
+    user_items.setdefault(addr, []).append({
+        "item":         item_type,
+        "metadata_uri": metadata_uri
+    })
 
     return jsonify({
         "message": f"{item_type} minted to {user_address}",
