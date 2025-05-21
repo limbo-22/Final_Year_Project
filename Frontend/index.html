@@ -23,9 +23,10 @@
     <!-- All buttons must explicitly be type="button" to prevent form submission -->
     <button type="button" onclick="connectWallet()">🔗 Connect Wallet</button>
     <button type="button" onclick="goNorth()">➡️ Go North</button>
-    <button type="button" onclick="pickUpItem('sword')">🗡️ Pick Up Sword</button>
-    <button type="button" onclick="pickUpItem('potion')">🧪 Drink Potion</button>
-    <button type="button" onclick="pickUpItem('gem')">💎 Grab Gem</button>
+    <button id="btn-sword" type="button" onclick="pickUpItem('sword')">🗡️ Pick Up Sword</button>
+    <button id="btn-potion" type="button" onclick="pickUpItem('potion')">🧪 Drink Potion</button>
+    <button id="btn-gem"    type="button" onclick="pickUpItem('gem')">💎 Grab Gem</button>
+
   </div>
 
   <!-- Ensure the game's logic file loads after the DOM -->

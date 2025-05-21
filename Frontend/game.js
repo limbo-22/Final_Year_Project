@@ -1,5 +1,7 @@
 let currentRoom = "Entrance";
 let hasMintedSword = false;
+let currentUser;         // will hold the connected wallet
+let mintedItems = [];    // array of item types already minted
 let provider;
 let signer;
 
@@ -39,92 +41,99 @@ function goNorth() {
   }
 }
 
-function pickUpItem(itemType) {
-  if (itemType === "sword" && currentRoom === "NorthRoom" && !hasMintedSword) {
-    mintItem("sword");
-  } else if (itemType === "sword" && hasMintedSword) {
-    alert("You already picked up the sword!");
-  } else {
-    mintItem(itemType); // for other items like "potion", "gem"
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert("MetaMask is not installed!");
+    return;
+  }
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    signer = await provider.getSigner();
+    currentUser = (await signer.getAddress()).toLowerCase();
+    document.getElementById("wallet-status").innerText = `Connected: ${currentUser}`;
+
+    // Fetch and initialize inventory
+    const invRes = await fetch(`http://localhost:5000/inventory/${currentUser}`);
+    if (invRes.ok) {
+      mintedItems = await invRes.json();
+      mintedItems.forEach(item => {
+        const btn = document.getElementById(`btn-${item}`);
+        if (btn) {
+          btn.innerText = `✅ ${item} minted`;
+          btn.disabled = true;
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Wallet connect failed:", err);
+    alert("Wallet connection failed.");
   }
 }
 
-
+function pickUpItem(itemType) {
+  // Ensure wallet is connected
+  if (!currentUser) {
+    alert("Please connect your wallet first.");
+    return;
+  }
+  // Prevent duplicate mints client-side
+  if (mintedItems.includes(itemType)) {
+    alert(`You already minted ${itemType}!`);
+    return;
+  }
+  // Proceed to mint
+  mintItem(itemType);
+}
 
 async function mintItem(itemType) {
+  console.log(`Attempting to mint item: ${itemType}`);
   try {
-
-    console.log(`Attempting to mint item: ${itemType}`);
-
-    if (!signer) {
-      alert("Please connect your wallet first.");
-      return;
-    }
-
-    const address = await signer.getAddress();
-    console.log("Connected wallet address:", address);
-
-
-    // 🔄 Fetch metadata from Flask
     console.log("Sending POST to backend...");
     const response = await fetch(`http://localhost:5000/mint/${itemType}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: address })
+      body: JSON.stringify({ user: currentUser })
     });
 
-    
-  if (!response.ok) {
-    const errorText = await response.text(); // to inspect backend response
-    console.error("Flask error response:", errorText);
-    alert(`Backend error (${response.status}): ${errorText}`);
-    return;
-  }
-
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Flask error response:", errorText);
+      alert(`Backend error (${response.status}): ${errorText}`);
+      return;
+    }
 
     const result = await response.json();
     const metadataURI = result.metadata_uri;
     console.log(`${itemType} metadata URI:`, metadataURI);
 
-    // 🧾 Use the correct contract
-    const contractAddress = nftContracts[itemType];
+    // Use ethers to mint on-chain
+    const contractAddress = nftContracts[itemType] || /* fallback address */ "";
     const contract = new ethers.Contract(contractAddress, abi, signer);
 
     console.log("Calling safeMint on contract...");
-    const tx = await contract.safeMint(address, metadataURI);
+    const tx = await contract.safeMint(currentUser, metadataURI);
     console.log("Transaction sent. Hash:", tx.hash);
 
-
     await tx.wait();
-     console.log("Transaction confirmed!");
+    console.log("Transaction confirmed!");
 
-    alert(`${itemType} NFT minted to your wallet!`);
-    if (itemType === "sword") hasMintedSword = true;
+    // Update state
+    mintedItems.push(itemType);
+    const btn = document.getElementById(`btn-${itemType}`);
+    if (btn) {
+      btn.innerText = `✅ ${itemType} minted`;
+      btn.disabled = true;
+    }
+
+    alert(`You got ${itemType}!`);
     displayRoom();
-
   } catch (err) {
     console.error("Mint failed:", err);
     alert("Minting failed. See console.");
   }
 }
 
-
-async function connectWallet() {
-  if (window.ethereum) {
-    try {
-      provider = new ethers.BrowserProvider(window.ethereum);
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      document.getElementById("wallet-status").innerText = `Connected: ${userAddress}`;
-    } catch (err) {
-      console.error("User rejected connection", err);
-      alert("Wallet connection rejected.");
-    }
-  } else {
-    alert("MetaMask is not installed!");
-  }
-}
 
 window.onload = () => {
   displayRoom();

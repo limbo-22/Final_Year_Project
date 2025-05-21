@@ -6,128 +6,168 @@ from flask import Flask, jsonify, request, send_from_directory
 from dotenv import load_dotenv
 from flask_cors import CORS
 
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-WEB3_STORAGE_TOKEN = os.getenv("WEB3_STORAGE_TOKEN")
-HEADERS = {"Authorization": f"Bearer {WEB3_STORAGE_TOKEN}"}
-
-# Base project directory
+# Base directory of the project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 🔄 Load metadata template from item_templates folder inside Flask/
+# ------------------------
+# In-memory inventory store
+# ------------------------
+# Maps lowercase wallet addresses to a list of minted item types
+user_items = {}
+
+# ------------------------
+# Helper Functions
+# ------------------------
+
 def load_item_template(item_type):
+    """Load the JSON template for an item."""
     try:
-        template_path = os.path.join(BASE_DIR, "item_templates", f"{item_type}.json")
-        with open(template_path, "r") as file:
-            return json.load(file)
+        path = os.path.join(BASE_DIR, "item_templates", f"{item_type}.json")
+        with open(path, "r") as f:
+            return json.load(f)
     except FileNotFoundError:
         print(f"[ERROR] Template not found for: {item_type}")
         return None
 
-# 🔍 Locate image files in assets
-def find_image_path(item_type, extensions=[".png", ".jpg", ".jpeg"]):
+
+def find_image_path(item_type, extensions=(".png", ".jpg", ".jpeg")):
+    """Locate the asset image for the given item."""
     for ext in extensions:
         candidate = os.path.join(BASE_DIR, "assets", f"{item_type}{ext}")
         if os.path.exists(candidate):
             return candidate
     return None
 
-# 📤 Upload binary file to Pinata
+
 def upload_to_pinata(filepath):
-    pinata_api_key = os.getenv("PINATA_API_KEY")
-    pinata_secret_api_key = os.getenv("PINATA_SECRET_API_KEY")
-    pinata_endpoint = os.getenv("PINATA_ENDPOINT")
-
-    headers = {
-        "pinata_api_key": pinata_api_key,
-        "pinata_secret_api_key": pinata_secret_api_key
-    }
-
-    with open(filepath, "rb") as file:
-        files = {'file': (os.path.basename(filepath), file)}
-        resp = requests.post(pinata_endpoint, headers=headers, files=files)
+    """Upload a binary file (image) to Pinata and return its IPFS URI."""
+    api_key = os.getenv("PINATA_API_KEY")
+    secret  = os.getenv("PINATA_SECRET_API_KEY")
+    endpoint = os.getenv("PINATA_ENDPOINT")
+    headers = {"pinata_api_key": api_key, "pinata_secret_api_key": secret}
+    with open(filepath, "rb") as f:
+        files = {"file": (os.path.basename(filepath), f)}
+        resp = requests.post(endpoint, headers=headers, files=files)
     resp.raise_for_status()
     cid = resp.json()["IpfsHash"]
     return f"ipfs://{cid}"
 
-# 📤 Upload JSON metadata directly (no disk), with filename matching item_type
+
 def upload_json_to_pinata(data: dict, item_type: str):
-    pinata_api_key = os.getenv("PINATA_API_KEY")
-    pinata_secret = os.getenv("PINATA_SECRET_API_KEY")
-    pinata_endpoint = os.getenv("PINATA_ENDPOINT")
-    headers = {
-        "pinata_api_key": pinata_api_key,
-        "pinata_secret_api_key": pinata_secret
-    }
+    """Upload JSON metadata directly to Pinata (no temp file), named <item_type>.json."""
+    api_key = os.getenv("PINATA_API_KEY")
+    secret  = os.getenv("PINATA_SECRET_API_KEY")
+    endpoint = os.getenv("PINATA_ENDPOINT")
+    headers = {"pinata_api_key": api_key, "pinata_secret_api_key": secret}
     json_bytes = json.dumps(data).encode("utf-8")
-    filename = f"{item_type}.json"
-    files = {'file': (filename, BytesIO(json_bytes), "application/json")}
-    resp = requests.post(pinata_endpoint, headers=headers, files=files)
+    files = {"file": (f"{item_type}.json", BytesIO(json_bytes), "application/json")}    
+    resp = requests.post(endpoint, headers=headers, files=files)
     resp.raise_for_status()
     cid = resp.json()["IpfsHash"]
     return f"ipfs://{cid}"
 
-@app.route("/")
+# ------------------------
+# Routes: Assets & Templates
+# ------------------------
+
+@app.route('/')
 def index():
     return "Game Metadata Backend Running"
 
-@app.route("/item_templates")
+@app.route('/item_templates')
 def list_templates():
-    templates_dir = os.path.join(BASE_DIR, "item_templates")
-    if not os.path.exists(templates_dir):
-        return jsonify({"error": "Template folder not found"}), 404
-    files = [f for f in os.listdir(templates_dir) if f.endswith(".json")]
+    """Return a list of available item template filenames."""
+    folder = os.path.join(BASE_DIR, "item_templates")
+    if not os.path.exists(folder):
+        return jsonify({"error": "Templates folder not found"}), 404
+    files = [f for f in os.listdir(folder) if f.endswith(".json")]
     return jsonify(files)
 
-@app.route("/item_templates/<item_type>")
+@app.route('/item_templates/<item_type>')
 def view_template(item_type):
+    """Return the JSON for a specific item template."""
     path = os.path.join(BASE_DIR, "item_templates", f"{item_type}.json")
     if not os.path.exists(path):
         return jsonify({"error": "Template not found"}), 404
     with open(path) as f:
         return jsonify(json.load(f))
 
-@app.route("/assets")
+@app.route('/assets')
 def list_assets():
-    assets_dir = os.path.join(BASE_DIR, "assets")
-    if not os.path.exists(assets_dir):
+    """Return a list of image filenames in assets folder."""
+    folder = os.path.join(BASE_DIR, "assets")
+    if not os.path.exists(folder):
         return jsonify({"error": "Assets folder not found"}), 404
-    images = [f for f in os.listdir(assets_dir) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
-    return jsonify(images)
+    imgs = [f for f in os.listdir(folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
+    return jsonify(imgs)
 
-@app.route("/assets/<filename>")
+@app.route('/assets/<filename>')
 def get_asset_image(filename):
-    assets_dir = os.path.join(BASE_DIR, "assets")
-    if not os.path.exists(os.path.join(assets_dir, filename)):
+    """Serve an asset image by filename."""
+    folder = os.path.join(BASE_DIR, "assets")
+    if not os.path.exists(os.path.join(folder, filename)):
         return jsonify({"error": f"File '{filename}' not found"}), 404
-    return send_from_directory(assets_dir, filename)
+    return send_from_directory(folder, filename)
 
-@app.route("/mint/<item_type>", methods=["POST"])
+# ------------------------
+# Routes: Inventory Tracking
+# ------------------------
+
+@app.route('/inventory/<user_address>')
+def get_inventory(user_address):
+    addr = user_address.lower()
+    # if this is the first time we’ve seen this wallet, create its list
+    if addr not in user_items:
+        user_items[addr] = []
+    return jsonify(user_items[addr])
+
+# ------------------------
+# Routes: Minting
+# ------------------------
+
+@app.route('/mint/<item_type>', methods=['POST'])
 def mint_item(item_type):
-    data = request.get_json()
-    user_address = data.get("user")
+    data = request.get_json() or {}
+    user_address = data.get('user')
+    if not user_address:
+        return jsonify({"error": "Missing user address"}), 400
+    addr = user_address.lower()
 
-    # 📦 Load metadata from template
+    # Initialize inventory list if first time
+    if addr not in user_items:
+        user_items[addr] = []
+
+    # Prevent duplicates
+    if item_type in user_items[addr]:
+        return jsonify({"error": f"{item_type} already minted"}), 400
+
+    # Load template
     item_data = load_item_template(item_type)
     if not item_data:
         return jsonify({"error": "Item type not supported"}), 400
 
-    # 🖼️ Upload image to IPFS
-    image_path = find_image_path(item_type)
-    if not image_path:
-        return jsonify({"error": "Image file not found"}), 404
-    item_data["image"] = upload_to_pinata(image_path)
+    # Upload image
+    img_path = find_image_path(item_type)
+    if not img_path:
+        return jsonify({"error": "Image not found"}), 404
+    item_data['image'] = upload_to_pinata(img_path)
 
-    # 📝 Upload metadata JSON directly
+    # Upload metadata JSON
     metadata_uri = upload_json_to_pinata(item_data, item_type)
 
+    # Record the mint in inventory
+    user_items[addr].append(item_type)
+
     return jsonify({
-        "message": f"{item_type} will be minted to {user_address}",
+        "message": f"{item_type} minted to {user_address}",
         "metadata_uri": metadata_uri
     })
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
