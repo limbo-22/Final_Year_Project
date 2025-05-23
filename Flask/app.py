@@ -15,6 +15,13 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Base directory of the project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+# Read these from your .env
+NFT_CONTRACTS = {
+    "sword":  os.getenv("CURRENT_CONTRACT_ADDRESS"),
+    "potion": os.getenv("CURRENT_CONTRACT_ADDRESS"),
+    "gem":    os.getenv("CURRENT_CONTRACT_ADDRESS"),
+}
 # ------------------------
 # In-memory inventory store
 # ------------------------
@@ -23,6 +30,10 @@ user_items = {
     #     { "item": "sword",  "metadata_uri": "ipfs://..." }
 }
 
+# Load a single ABI file once
+with open(os.path.join(BASE_DIR, "erc721_abi.json")) as f:
+    CONTRACT_ABI = json.load(f)
+
 # ------------------------
 # Helper Functions
 # ------------------------
@@ -30,7 +41,7 @@ user_items = {
 def load_item_template(item_type):
     """Load the JSON template for an item."""
     try:
-        path = os.path.join(BASE_DIR, "item_templates", f"{item_type}.json")
+        path = os.path.join(BASE_DIR, "metadata", f"{item_type}.json")
         with open(path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
@@ -82,19 +93,19 @@ def upload_json_to_pinata(data: dict, item_type: str):
 def index():
     return "Game Metadata Backend Running"
 
-@app.route('/item_templates')
+@app.route('/metadata')
 def list_templates():
     """Return a list of available item template filenames."""
-    folder = os.path.join(BASE_DIR, "item_templates")
+    folder = os.path.join(BASE_DIR, "metadata")
     if not os.path.exists(folder):
         return jsonify({"error": "Templates folder not found"}), 404
     files = [f for f in os.listdir(folder) if f.endswith(".json")]
     return jsonify(files)
 
-@app.route('/item_templates/<item_type>')
+@app.route('/metadata/<item_type>')
 def view_template(item_type):
     """Return the JSON for a specific item template."""
-    path = os.path.join(BASE_DIR, "item_templates", f"{item_type}.json")
+    path = os.path.join(BASE_DIR, "metadata", f"{item_type}.json")
     if not os.path.exists(path):
         return jsonify({"error": "Template not found"}), 404
     with open(path) as f:
@@ -116,6 +127,34 @@ def get_asset_image(filename):
     if not os.path.exists(os.path.join(folder, filename)):
         return jsonify({"error": f"File '{filename}' not found"}), 404
     return send_from_directory(folder, filename)
+
+@app.route("/assets", methods=["POST"])
+def upload_asset():
+    """
+    Expects: multipart/form-data with fields:
+      - file: the image file (png/jpg/jpeg)
+    """
+    f = request.files.get("file")
+    if not f or not f.filename.lower().endswith((".png", ".jpg", ".jpeg")):
+        return jsonify(error="Must upload an image"), 400
+
+    dst = os.path.join(BASE_DIR, "assets", f.filename)
+    f.save(dst)
+    return jsonify(message="Asset uploaded"), 200
+
+@app.route("/item_templates", methods=["POST"])
+def upload_template():
+    """
+    Expects: multipart/form-data with fields:
+      - file: the JSON metadata file (must be named <type>.json)
+    """
+    f = request.files.get("file")
+    if not f or not f.filename.endswith(".json"):
+        return jsonify(error="Must upload a .json file"), 400
+
+    dst = os.path.join(BASE_DIR, "item_templates", f.filename)
+    f.save(dst)
+    return jsonify(message="Template uploaded"), 200
 
 # ------------------------
 # Routes: Inventory Tracking
@@ -173,6 +212,24 @@ def mint_item(item_type):
     return jsonify({
         "message": f"{item_type} minted to {user_address}",
         "metadata_uri": metadata_uri
+    })
+    
+# ------------------------
+# Routes: Getting contracts
+# ------------------------
+
+@app.route("/contracts")
+def get_contracts():
+    """
+    Returns:
+      {
+        "contracts": { "sword": "...", "potion": "...", ... },
+        "abi": [ ... ]   // ERC-721 safeMint ABI + any extras
+      }
+    """
+    return jsonify({
+        "contracts": NFT_CONTRACTS,
+        "abi":       CONTRACT_ABI
     })
 
 if __name__ == '__main__':

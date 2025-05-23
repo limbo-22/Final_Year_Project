@@ -1,0 +1,19 @@
+Adding a new item to flask backend.
+
+flask backend exposes nice api.
+
+Javascript library: seamlessly interact with api
+
+Goal: frontend developer call functions you defined for me in javascript library or interact wia frontend html, then backend deals them with api.
+
+Let connect wallet into library. Mint/ pick up objects, getting inventory: all in library
+
+add restrictions: not everyone can mint/play game!
+
+item type: only weapon must be only owned by users! can't be exploited by simply calling flask functions!
+
+keep a stable database for running app.py is accepted.
+
+2D game: a shop!
+
+blockchain securing game-environment: a complementory survey.

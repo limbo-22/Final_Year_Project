@@ -6,22 +6,9 @@ let mintedItems = [];    // array of itemType strings already minted
 let provider;
 let signer;
 
-const nftContracts = {
-  sword:  "0x9f64932be34d5d897c4253d17707b50921f372b6",
-  potion: "0x9f64932be34d5d897c4253d17707b50921f372b6",
-  gem:    "0x9f64932be34d5d897c4253d17707b50921f372b6"
-};
-
-const abi = [{
-  "inputs": [
-    { "internalType": "address", "name": "to",  "type": "address" },
-    { "internalType": "string",  "name": "uri", "type": "string"  }
-  ],
-  "name": "safeMint",
-  "outputs": [],
-  "stateMutability": "nonpayable",
-  "type": "function"
-}];
+// dynamically loaded from Flask
+let nftContracts = {};
+let abi = [];
 
 function displayRoom() {
   const hasSword = mintedItems.includes("sword");
@@ -45,6 +32,16 @@ async function connectWallet() {
   if (!window.ethereum) {
     alert("MetaMask is not installed!");
     return;
+  }
+
+  // 0) fetch contract config & ABI first
+  try {
+    const cfg = await fetch("http://localhost:5000/contracts").then(r=>r.json());
+    nftContracts = cfg.contracts;
+    abi          = cfg.abi;
+  } catch (e) {
+    console.error("Failed to load contract config", e);
+    return alert("Could not load contract info");
   }
 
   try {
@@ -96,9 +93,12 @@ async function mintItem(itemType) {
     console.log(`${itemType} metadata URI:`, metadata_uri);
 
     // on‐chain mint
-    const contract = new ethers.Contract(
-      nftContracts[itemType], abi, signer
-    );
+    const contractAddress = nftContracts[itemType];
+    if (!contractAddress) {
+      return alert(`No contract configured for ${itemType}`);
+    }
+    const contract = new ethers.Contract(contractAddress, abi, signer);
+    
     const tx = await contract.safeMint(currentUser, metadata_uri);
     console.log("Tx sent:", tx.hash);
     await tx.wait();
