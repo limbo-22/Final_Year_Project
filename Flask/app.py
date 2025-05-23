@@ -38,14 +38,14 @@ with open(os.path.join(BASE_DIR, "erc721_abi.json")) as f:
 # Helper Functions
 # ------------------------
 
-def load_item_template(item_type):
-    """Load the JSON template for an item."""
+def load_metadata(item_type):
+    """Load the JSON metadata for an item."""
     try:
         path = os.path.join(BASE_DIR, "metadata", f"{item_type}.json")
         with open(path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"[ERROR] Template not found for: {item_type}")
+        print(f"[ERROR] Metadata not found for: {item_type}")
         return None
 
 
@@ -86,7 +86,7 @@ def upload_json_to_pinata(data: dict, item_type: str):
     return f"ipfs://{cid}"
 
 # ------------------------
-# Routes: Assets & Templates
+# Routes: Assets & Metadata
 # ------------------------
 
 @app.route('/')
@@ -94,20 +94,20 @@ def index():
     return "Game Metadata Backend Running"
 
 @app.route('/metadata')
-def list_templates():
-    """Return a list of available item template filenames."""
+def list_metadata():
+    """Return a list of available item metadata filenames."""
     folder = os.path.join(BASE_DIR, "metadata")
     if not os.path.exists(folder):
-        return jsonify({"error": "Templates folder not found"}), 404
+        return jsonify({"error": "Metadata folder not found"}), 404
     files = [f for f in os.listdir(folder) if f.endswith(".json")]
     return jsonify(files)
 
 @app.route('/metadata/<item_type>')
-def view_template(item_type):
-    """Return the JSON for a specific item template."""
+def view_metadata(item_type):
+    """Return the JSON for a specific item metadata."""
     path = os.path.join(BASE_DIR, "metadata", f"{item_type}.json")
     if not os.path.exists(path):
-        return jsonify({"error": "Template not found"}), 404
+        return jsonify({"error": "Metadata not found"}), 404
     with open(path) as f:
         return jsonify(json.load(f))
 
@@ -142,8 +142,8 @@ def upload_asset():
     f.save(dst)
     return jsonify(message="Asset uploaded"), 200
 
-@app.route("/item_templates", methods=["POST"])
-def upload_template():
+@app.route("/metadata", methods=["POST"])
+def upload_metadata():
     """
     Expects: multipart/form-data with fields:
       - file: the JSON metadata file (must be named <type>.json)
@@ -152,9 +152,9 @@ def upload_template():
     if not f or not f.filename.endswith(".json"):
         return jsonify(error="Must upload a .json file"), 400
 
-    dst = os.path.join(BASE_DIR, "item_templates", f.filename)
+    dst = os.path.join(BASE_DIR, "metadata", f.filename)
     f.save(dst)
-    return jsonify(message="Template uploaded"), 200
+    return jsonify(message="Metadata uploaded"), 200
 
 # ------------------------
 # Routes: Inventory Tracking
@@ -189,8 +189,8 @@ def mint_item(item_type):
     if addr in user_items and any(e["item"] == item_type for e in user_items[addr]):
         return jsonify({"error": f"{item_type} already minted"}), 400
 
-    # Load template
-    item_data = load_item_template(item_type)
+    # Load metadata
+    item_data = load_metadata(item_type)
     if not item_data:
         return jsonify({"error": "Item type not supported"}), 400
 
