@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from io import BytesIO
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, url_for
 from dotenv import load_dotenv
 from flask_cors import CORS
 
@@ -14,6 +14,13 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Base directory of the project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ERC-721 ABI + pinata creds
+with open(os.path.join(BASE_DIR, 'erc721_abi.json')) as f:
+    CONTRACT_ABI = json.load(f)
+PINATA_KEY    = os.getenv('PINATA_API_KEY')
+PINATA_SECRET = os.getenv('PINATA_SECRET_API_KEY')
+PINATA_URL    = os.getenv('PINATA_ENDPOINT')
 
 
 # Read these from your .env
@@ -30,10 +37,6 @@ user_items = {
     #     { "item": "sword",  "metadata_uri": "ipfs://..." }
 }
 
-# Load a single ABI file once
-with open(os.path.join(BASE_DIR, "erc721_abi.json")) as f:
-    CONTRACT_ABI = json.load(f)
-
 # ------------------------
 # Helper Functions
 # ------------------------
@@ -47,43 +50,23 @@ def load_metadata(item_type):
     except FileNotFoundError:
         print(f"[ERROR] Metadata not found for: {item_type}")
         return None
+    
+def pin_file(filepath):
+    headers = { 'pinata_api_key': PINATA_KEY, 'pinata_secret_api_key': PINATA_SECRET }
+    with open(filepath, 'rb') as f:
+        res = requests.post(PINATA_URL, headers=headers, files={ 'file': (os.path.basename(filepath), f) })
+    res.raise_for_status()
+    return f"ipfs://{res.json()['IpfsHash']}"
+
+def pin_json(data, name):
+    headers = { 'pinata_api_key': PINATA_KEY, 'pinata_secret_api_key': PINATA_SECRET }
+    payload = BytesIO(json.dumps(data).encode())
+    res = requests.post(PINATA_URL, headers=headers, files={ 'file': (f'{name}.json', payload) })
+    res.raise_for_status()
+    return f"ipfs://{res.json()['IpfsHash']}"
 
 
-def find_image_path(item_type, extensions=(".png", ".jpg", ".jpeg")):
-    """Locate the asset image for the given item."""
-    for ext in extensions:
-        candidate = os.path.join(BASE_DIR, "assets", f"{item_type}{ext}")
-        if os.path.exists(candidate):
-            return candidate
-    return None
 
-
-def upload_to_pinata(filepath):
-    """Upload a binary file (image) to Pinata and return its IPFS URI."""
-    api_key = os.getenv("PINATA_API_KEY")
-    secret  = os.getenv("PINATA_SECRET_API_KEY")
-    endpoint = os.getenv("PINATA_ENDPOINT")
-    headers = {"pinata_api_key": api_key, "pinata_secret_api_key": secret}
-    with open(filepath, "rb") as f:
-        files = {"file": (os.path.basename(filepath), f)}
-        resp = requests.post(endpoint, headers=headers, files=files)
-    resp.raise_for_status()
-    cid = resp.json()["IpfsHash"]
-    return f"ipfs://{cid}"
-
-
-def upload_json_to_pinata(data: dict, item_type: str):
-    """Upload JSON metadata directly to Pinata (no temp file), named <item_type>.json."""
-    api_key = os.getenv("PINATA_API_KEY")
-    secret  = os.getenv("PINATA_SECRET_API_KEY")
-    endpoint = os.getenv("PINATA_ENDPOINT")
-    headers = {"pinata_api_key": api_key, "pinata_secret_api_key": secret}
-    json_bytes = json.dumps(data).encode("utf-8")
-    files = {"file": (f"{item_type}.json", BytesIO(json_bytes), "application/json")}    
-    resp = requests.post(endpoint, headers=headers, files=files)
-    resp.raise_for_status()
-    cid = resp.json()["IpfsHash"]
-    return f"ipfs://{cid}"
 
 # ------------------------
 # Routes: Assets & Metadata
@@ -92,6 +75,11 @@ def upload_json_to_pinata(data: dict, item_type: str):
 @app.route('/')
 def index():
     return "Game Metadata Backend Running"
+
+# Endpoint: contract config
+@app.route('/contracts')
+def get_contracts():
+    return jsonify({ 'contracts': NFT_CONTRACTS, 'abi': CONTRACT_ABI })
 
 @app.route('/metadata')
 def list_metadata():
@@ -128,109 +116,68 @@ def get_asset_image(filename):
         return jsonify({"error": f"File '{filename}' not found"}), 404
     return send_from_directory(folder, filename)
 
-@app.route("/assets", methods=["POST"])
-def upload_asset():
-    """
-    Expects: multipart/form-data with fields:
-      - file: the image file (png/jpg/jpeg)
-    """
-    f = request.files.get("file")
-    if not f or not f.filename.lower().endswith((".png", ".jpg", ".jpeg")):
-        return jsonify(error="Must upload an image"), 400
 
-    dst = os.path.join(BASE_DIR, "assets", f.filename)
-    f.save(dst)
-    return jsonify(message="Asset uploaded"), 200
-
-@app.route("/metadata", methods=["POST"])
-def upload_metadata():
-    """
-    Expects: multipart/form-data with fields:
-      - file: the JSON metadata file (must be named <type>.json)
-    """
-    f = request.files.get("file")
-    if not f or not f.filename.endswith(".json"):
-        return jsonify(error="Must upload a .json file"), 400
-
-    dst = os.path.join(BASE_DIR, "metadata", f.filename)
-    f.save(dst)
-    return jsonify(message="Metadata uploaded"), 200
-
-# ------------------------
-# Routes: Inventory Tracking
-# ------------------------
-
-@app.route('/inventory/<user_address>')
-def get_inventory(user_address):
-    addr = user_address.lower()
-    # if this is the first time we’ve seen this wallet, create its list
-    if addr not in user_items:
-        user_items[addr] = []
-    return jsonify(user_items[addr])
-
-# ------------------------
-# Routes: Minting
-# ------------------------
-
+# Endpoint: mint – uploads image + metadata, records inventory
 @app.route('/mint/<item_type>', methods=['POST'])
-def mint_item(item_type):
+def mint(item_type):
     data = request.get_json() or {}
-    user_address = data.get('user')
-    if not user_address:
-        return jsonify({"error": "Missing user address"}), 400
+    user = data.get('user')
+    if not user:
+        return jsonify({ 'error': 'Missing user address' }), 400
+    addr = user.lower()
+    user_items.setdefault(addr, [])
+    if any(e['item']==item_type for e in user_items[addr]):
+        return jsonify({ 'error': f'{item_type} already minted' }), 400
+
+    meta = load_metadata(item_type)
+    if not meta:
+        return jsonify({ 'error': 'Unknown item type' }), 400
+
+    # Pin image & metadata
+    img_path = os.path.join(BASE_DIR, 'assets', f'{item_type}.png')
+    if not os.path.exists(img_path):
+        return jsonify({'error': 'Image not found'}), 404
+    img_uri  = pin_file(img_path)
+    meta['image'] = img_uri
+    meta_uri = pin_json(meta, item_type)
+
+
+    # record both URIs in inventory
+    user_items[addr].append({
+        'item':         item_type,
+        'metadata_uri': meta_uri,
+        'image_uri':    img_uri
+    })
+
+    return jsonify({
+        'metadata_uri': meta_uri,
+        'image_uri':    img_uri
+    })
+
+# Enriched inventory
+@app.route('/inventory/<user_address>')
+def inventory(user_address):
     addr = user_address.lower()
+    user_items.setdefault(addr, [])
 
-    # Initialize inventory list if first time
-    if addr not in user_items:
-        user_items[addr] = []
-        
+    enriched = []
+    for entry in user_items[addr]:
+        item = entry['item']
+        meta = load_metadata(item)
+        if not meta:
+            continue
 
-    # Prevent duplicates
-    if addr in user_items and any(e["item"] == item_type for e in user_items[addr]):
-        return jsonify({"error": f"{item_type} already minted"}), 400
+        # Build a link to your Flask‐served JSON
+        meta_url = url_for('view_metadata', item_type=item, _external=True)
 
-    # Load metadata
-    item_data = load_metadata(item_type)
-    if not item_data:
-        return jsonify({"error": "Item type not supported"}), 400
-
-    # Upload image
-    img_path = find_image_path(item_type)
-    if not img_path:
-        return jsonify({"error": "Image not found"}), 404
-    item_data['image'] = upload_to_pinata(img_path)
-
-    # Upload metadata JSON
-    metadata_uri = upload_json_to_pinata(item_data, item_type)
-
-    # 📦 record the mint with its metadata URI
-    user_items.setdefault(addr, []).append({
-        "item":         item_type,
-        "metadata_uri": metadata_uri
-    })
-
-    return jsonify({
-        "message": f"{item_type} minted to {user_address}",
-        "metadata_uri": metadata_uri
-    })
-    
-# ------------------------
-# Routes: Getting contracts
-# ------------------------
-
-@app.route("/contracts")
-def get_contracts():
-    """
-    Returns:
-      {
-        "contracts": { "sword": "...", "potion": "...", ... },
-        "abi": [ ... ]   // ERC-721 safeMint ABI + any extras
-      }
-    """
-    return jsonify({
-        "contracts": NFT_CONTRACTS,
-        "abi":       CONTRACT_ABI
-    })
+        enriched.append({
+            'item':         item,
+            'name':         meta.get('name'),
+            'description':  meta.get('description'),
+            'image_url':    entry['image_uri'].replace('ipfs://', 'https://ipfs.io/ipfs/'),
+            'metadata_url': meta_url
+        })
+    return jsonify(enriched)
 
 if __name__ == '__main__':
     app.run(debug=True)

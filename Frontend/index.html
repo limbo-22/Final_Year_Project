@@ -1,67 +1,74 @@
+<!-- index.html (updated to use external style.css) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Text Adventure Game</title>
+
+  <!-- Ethers.js for wallet + contract calls -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.2/dist/ethers.umd.min.js"></script>
+
+  <!-- Refactored styles now in style.css -->
   <link rel="stylesheet" href="style.css" />
-  <style>
-    body { font-family: Arial, sans-serif; background: #111; color: #eee; padding: 20px; }
-    #game-box { border: 1px solid #555; padding: 20px; max-width: 600px; margin: auto; background: #222; }
-    button { margin-top: 10px; padding: 10px; background: #333; color: #eee; border: none; cursor: pointer; }
-    button:hover { background: #444; }
-  </style>
 </head>
 <body>
   <div id="game-box">
     <h2>Find the Lost Sword</h2>
 
+    <!-- Wallet and game text -->
     <p id="wallet-status">Not connected</p>
     <p id="game-text">Loading...</p>
 
-    <!-- All buttons must explicitly be type="button" to prevent form submission -->
-    <button type="button" onclick="connectWallet()">🔗 Connect Wallet</button>
-    <button type="button" onclick="goNorth()">➡️ Go North</button>
+    <!-- Game control buttons -->
+    <button type="button" onclick="connectWallet()">
+      🔗 Connect Wallet
+    </button>
+    <button type="button" onclick="goNorth()">
+      ➡️ Go North
+    </button>
+
+    <!-- Mint buttons -->
     <button id="btn-sword"
             data-default-text="🗡️ Pick Up Sword"
             type="button"
-            onclick="pickUpItem('sword')">
+            onclick="mintItem('sword')">
       🗡️ Pick Up Sword
     </button>
-
     <button id="btn-potion"
             data-default-text="🧪 Drink Potion"
             type="button"
-            onclick="pickUpItem('potion')">
+            onclick="mintItem('potion')">
       🧪 Drink Potion
     </button>
-
     <button id="btn-gem"
             data-default-text="💎 Grab Gem"
             type="button"
-            onclick="pickUpItem('gem')">
+            onclick="mintItem('gem')">
       💎 Grab Gem
     </button>
-    
-    <button id="btn-inventory" type="button" onclick="showInventory()">
+
+    <!-- Inventory -->
+    <button
+      id="btn-inventory"
+      data-default-text="📦 My Inventory"
+      type="button"
+      onclick="showInventory()"
+    >
       📦 My Inventory
     </button>
-
   </div>
 
-
-  <div id="inventory-modal" style="display:none; position:fixed;
-      top:10%; left:50%; transform:translateX(-50%);
-      background:#222; border:1px solid #555; padding:20px; max-width:80%; max-height:80%; overflow:auto;">
+  <!-- Inventory modal -->
+  <div id="inventory-modal">
     <h3>Your Items</h3>
     <div id="inventory-list" style="display:flex; flex-wrap:wrap; gap:10px;">
-      <!-- JS will inject item cards here -->
+      <!-- Cards will be injected here by game.js -->
     </div>
     <button type="button" onclick="hideInventory()">Close</button>
   </div>
-  
-  <!-- Ensure the game's logic file loads after the DOM -->
+
+  <!-- Your refactored game logic -->
   <script src="game.js"></script>
 </body>
 </html>

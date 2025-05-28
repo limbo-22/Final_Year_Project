@@ -1,10 +1,7 @@
 let currentRoom = "Entrance";
-
-let currentUser;         // will hold the connected wallet
+const API = "http://localhost:5000";
+let provider, signer, currentUser;         // will hold the connected wallet
 let mintedItems = [];    // array of itemType strings already minted
-
-let provider;
-let signer;
 
 // dynamically loaded from Flask
 let nftContracts = {};
@@ -28,159 +25,75 @@ function goNorth() {
   }
 }
 
+// 1) Connect wallet and preload state
 async function connectWallet() {
-  if (!window.ethereum) {
-    alert("MetaMask is not installed!");
-    return;
-  }
+  if (!window.ethereum) return alert("Install MetaMask");
+  provider = new ethers.BrowserProvider(window.ethereum);
+  await window.ethereum.request({ method: 'eth_requestAccounts' });
+  signer      = await provider.getSigner();
+  currentUser = (await signer.getAddress()).toLowerCase();
 
-  // 0) fetch contract config & ABI first
-  try {
-    const cfg = await fetch("http://localhost:5000/contracts").then(r=>r.json());
-    nftContracts = cfg.contracts;
-    abi          = cfg.abi;
-  } catch (e) {
-    console.error("Failed to load contract config", e);
-    return alert("Could not load contract info");
-  }
-
-  try {
-    provider = new ethers.BrowserProvider(window.ethereum);
-    await window.ethereum.request({ method: 'eth_requestAccounts' });
-    signer = await provider.getSigner();
-    currentUser = (await signer.getAddress()).toLowerCase();
-    document.getElementById("wallet-status")
-            .innerText = `Connected: ${currentUser}`;
-
-    // load & lock buttons
-    await loadInventory();
-  } catch (err) {
-    console.error("Wallet connect failed:", err);
-    alert("Wallet connection failed.");
-  }
+  document.getElementById("wallet-status").innerText = `Connected: ${currentUser}`;
+  await refreshButtons();
 }
 
-function pickUpItem(itemType) {
-  if (!currentUser) {
-    alert("Please connect your wallet first.");
-    return;
-  }
-
-  mintItem(itemType);
-}
-
+// 2) Mint an item via backend and then on-chain
 async function mintItem(itemType) {
-  console.log(`Attempting to mint item: ${itemType}`);
-  try {
-    const response = await fetch(
-      `http://localhost:5000/mint/${itemType}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user: currentUser })
-      }
-    );
+  if (!currentUser) return alert("Connect first");
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => null);
-      console.error("Flask error response:", err);
-      alert(`Backend error (${response.status}): ${
-        err?.error || await response.text()
-      }`);
-      return;
-    }
+  // Trigger backend mint (uploads assets, pins to IPFS, records inventory)
+  const resp = await fetch(`${API}/mint/${itemType}`, {
+    method: "POST",
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user: currentUser })
+  });
+  const result = await resp.json();
+  if (!resp.ok) return alert(result.error || "Mint failed");
 
-    const { metadata_uri } = await response.json();
-    console.log(`${itemType} metadata URI:`, metadata_uri);
+  // Fetch contract addresses & ABI
+  const { contracts, abi } = await fetch(`${API}/contracts`).then(r => r.json());
+  const contract = new ethers.Contract(contracts[itemType], abi, signer);
 
-    // on‐chain mint
-    const contractAddress = nftContracts[itemType];
-    if (!contractAddress) {
-      return alert(`No contract configured for ${itemType}`);
-    }
-    const contract = new ethers.Contract(contractAddress, abi, signer);
-    
-    const tx = await contract.safeMint(currentUser, metadata_uri);
-    console.log("Tx sent:", tx.hash);
-    await tx.wait();
-    console.log("Transaction confirmed!");
+  // Send the on-chain transaction
+  const tx = await contract.safeMint(currentUser, result.metadata_uri);
+  console.log("Mint TX:", tx.hash);
+  await tx.wait();
 
-    // record & lock
-    mintedItems.push(itemType);
-    const btn = document.getElementById(`btn-${itemType}`);
-    if (btn) {
-      btn.innerText  = `✅ ${itemType} minted`;
-      btn.disabled   = true;
-    }
-
-    alert(`You got ${itemType}!`);
-    displayRoom();
-
-  } catch (err) {
-    console.error("Mint failed:", err);
-    alert("Minting failed. See console.");
-  }
+  alert(`🎉 You minted a ${itemType}!`);
+  await refreshButtons();
 }
 
+// 3) Refresh button states from enriched inventory
+async function refreshButtons() {
+  document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
+    btn.disabled = false;
+    btn.innerText = btn.dataset.defaultText;
+  });
+
+  const items = await fetch(`${API}/inventory/${currentUser}`).then(r => r.json());
+  items.forEach(i => {
+    const btn = document.getElementById(`btn-${i.item}`);
+    if (btn) {
+      btn.disabled = true;
+      btn.innerText = `✅ ${i.item}`;
+    }
+  });
+}
+
+// 4) Show inventory modal with enriched data
 async function showInventory() {
-  if (!currentUser) {
-    alert("Connect your wallet first!");
-    return;
-  }
+  if (!currentUser) return alert("Connect first");
 
-  const res = await fetch(
-    `http://localhost:5000/inventory/${currentUser}`
-  );
-  if (!res.ok) {
-    alert("Failed to load inventory");
-    return;
-  }
-  const entries = await res.json();
-  // entries = [ { item, metadata_uri }, ... ]
-
+  const items = await fetch(`${API}/inventory/${currentUser}`).then(r => r.json());
   const listEl = document.getElementById("inventory-list");
-  listEl.innerHTML = "";
-
-  for (const { item, metadata_uri } of entries) {
-    // normalize gateway URL
-    let metaUrl = metadata_uri;
-    if (metaUrl.startsWith("ipfs://")) {
-      metaUrl = metaUrl.replace("ipfs://", "https://ipfs.io/ipfs/");
-    }
-    const metaRes = await fetch(metaUrl);
-    if (!metaRes.ok) continue;
-    const metadata = await metaRes.json();
-
-    const card = document.createElement("div");
-    card.style.cssText = `
-      border:1px solid #444;
-      padding:10px;
-      width:120px;
-      text-align:center;
-      background:#333;
-    `;
-
-    // image
-    const img = document.createElement("img");
-    let imgUrl = metadata.image;
-    if (imgUrl.startsWith("ipfs://")) {
-      imgUrl = imgUrl.replace("ipfs://", "https://ipfs.io/ipfs/");
-    }
-    img.src   = imgUrl;
-    img.alt   = item;
-    img.style.width = "100%";
-    card.appendChild(img);
-
-    // label + link
-    const label = document.createElement("p");
-    label.innerHTML = `
-      <strong>${item}</strong><br/>
-      <a href="${metaUrl}" target="_blank">View Metadata</a>
-    `;
-    card.appendChild(label);
-
-    listEl.appendChild(card);
-  }
-
+  listEl.innerHTML = items.map(i => `
+    <div class="card">
+      <img src="${i.image_url}" alt="${i.name}" />
+      <h4>${i.name}</h4>
+      <p>${i.description}</p>
+      <a href="${i.metadata_url}" target="_blank">View Metadata</a>
+    </div>
+  `).join('');
   document.getElementById("inventory-modal").style.display = "block";
 }
 
@@ -188,39 +101,10 @@ function hideInventory() {
   document.getElementById("inventory-modal").style.display = "none";
 }
 
-async function loadInventory() {
-  if (!currentUser) return;
 
-  //  Reset all buttons back to their default state
-  //    (we assume your HTML buttons have data-default-text attributes)
-  document.querySelectorAll('button[id^="btn-"]').forEach(btn => {
-    const def = btn.dataset.defaultText;
-    if (!def) return;                // skip buttons that don’t have it
-    btn.disabled  = false;
-    btn.innerText = def;
-  });
-
-  const res = await fetch(
-    `http://localhost:5000/inventory/${currentUser}`
-  );
-  if (!res.ok) return;
-
-  const entries = await res.json();
-  // convert to simple string list
-  mintedItems = entries.map(e => e.item);
-
-  mintedItems.forEach(itemType => {
-    const btn = document.getElementById(`btn-${itemType}`);
-    if (btn) {
-      btn.innerText = `✅ ${itemType} minted`;
-      btn.disabled  = true;
-    }
-  });
-}
-
-// Auto‐reconnect & lock buttons if MetaMask is already unlocked
+// Auto-reconnect if already authorized
 window.onload = async () => {
-  displayRoom();
+  displayRoom();   // game logic UI
 
   if (window.ethereum) {
     provider = new ethers.BrowserProvider(window.ethereum);
@@ -228,9 +112,8 @@ window.onload = async () => {
     if (accounts.length) {
       signer      = await provider.getSigner();
       currentUser = accounts[0].address.toLowerCase();
-      document.getElementById("wallet-status")
-              .innerText = `Connected: ${currentUser}`;
-      await loadInventory();
+      document.getElementById("wallet-status").innerText = `Connected: ${currentUser}`;
+      await refreshButtons();
     }
   }
 };
