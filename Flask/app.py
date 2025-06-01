@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from io import BytesIO
-from flask import Flask, jsonify, request, send_from_directory, url_for
+from flask import Flask, jsonify, request, send_from_directory, url_for, render_template
 from dotenv import load_dotenv
 from flask_cors import CORS
 
@@ -65,8 +65,23 @@ def pin_json(data, name):
     res.raise_for_status()
     return f"ipfs://{res.json()['IpfsHash']}"
 
+# ── Serve the SDK template as JavaScript ─────────────────────────────────────
+@app.route("/sdk.js")
+def serve_sdk():
+    return (
+        render_template(
+            "sdk.js.j2",
+            NFT_CONTRACTS=NFT_CONTRACTS,
+            CONTRACT_ABI=CONTRACT_ABI
+        ),
+        200,
+        {"Content-Type": "application/javascript"}
+    )
 
-
+# Endpoint: contract config
+@app.route('/contracts')
+def get_contracts():
+    return jsonify({ 'contracts': NFT_CONTRACTS, 'abi': CONTRACT_ABI })
 
 # ------------------------
 # Routes: Assets & Metadata
@@ -76,10 +91,6 @@ def pin_json(data, name):
 def index():
     return "Game Metadata Backend Running"
 
-# Endpoint: contract config
-@app.route('/contracts')
-def get_contracts():
-    return jsonify({ 'contracts': NFT_CONTRACTS, 'abi': CONTRACT_ABI })
 
 @app.route('/metadata')
 def list_metadata():

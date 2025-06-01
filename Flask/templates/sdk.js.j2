@@ -1,0 +1,134 @@
+// sdk.js.j2  — rendered as /sdk.js by Flask
+
+const API = "http://localhost:5000"
+
+// 👑 SDK wrapper for your game UI
+const SDK = {
+  provider: null,
+  signer:   null,
+  user:     null,
+  contracts:null,
+  abi:      null,
+  onAccountChange: null,  // optional callback
+
+  async loadConfig() {
+    if (!this.contracts) {
+      const { contracts, abi } = await fetch(`${API}/contracts`)
+        .then(r => r.json());
+      this.contracts = contracts;
+      this.abi       = abi;
+    }
+  },
+
+  // connect MetaMask and return the lowercase address
+  async connect() {
+    if (!window.ethereum) throw new Error("MetaMask not found");
+    this.provider = new ethers.BrowserProvider(window.ethereum);
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    this.signer = await this.provider.getSigner();
+    this.user   = (await this.signer.getAddress()).toLowerCase();
+
+    await this.loadConfig();
+    await this.refreshButtons();
+    if (this.onAccountChange) this.onAccountChange(this.user);
+    return this.user;
+  },
+
+  async init() {
+    if (!window.ethereum) return;
+    this.provider = new ethers.BrowserProvider(window.ethereum);
+    await this.loadConfig();
+
+    // 1️⃣ Silent reconnect if already authorized (no popup)
+    const accounts = await this.provider.listAccounts();
+    if (accounts.length) {
+      // first entry might be { address: "0x…" } or a plain string
+      const raw = accounts[0];
+      const addr = typeof raw === "string" ? raw : raw.address;
+      this.signer = await this.provider.getSigner();
+      this.user   = addr.toLowerCase();
+      await this.refreshButtons();
+      if (this.onAccountChange) this.onAccountChange(this.user);
+    }
+
+    // 2️⃣ Listen for account changes
+    window.ethereum.on("accountsChanged", async (accounts) => {
+    if (accounts.length) {
+      // this event *should* give you strings, but guard anyway
+      const raw = accounts[0];
+      const addr = typeof raw === "string" ? raw : raw.address;
+      this.signer = await this.provider.getSigner();
+      this.user   = addr.toLowerCase();
+      } else {
+        this.signer = null;
+        this.user   = null;
+      }
+      await this.refreshButtons();
+      if (this.onAccountChange) this.onAccountChange(this.user);
+    });
+  },
+
+  // mint via backend + safeMint on-chain
+  async mint(itemType) {
+    if (!this.user) throw new Error("Not connected");
+    // 1️⃣ backend mint
+    let res = await fetch(`${API}/mint/${itemType}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: this.user })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(async () => ({ error: await res.text() }));
+      throw new Error(err.error || "Mint failed");
+    }
+    const { metadata_uri } = await res.json();
+
+    // 2️⃣ on-chain safeMint
+    const cinfo = await fetch(`${API}/contracts`).then(r=>r.json());
+    const contract = new ethers.Contract(
+      cinfo.contracts[itemType], cinfo.abi, this.signer
+    );
+    const tx = await contract.safeMint(this.user, metadata_uri);
+    await tx.wait();
+    return metadata_uri;
+  },
+
+  // fetch & render button states
+  async refreshButtons() {
+    document.querySelectorAll("button[data-item]").forEach(btn => {
+      btn.disabled  = false;
+      btn.innerText = btn.dataset.defaultText;
+    });
+    if (!this.user) return;
+    const inv = await fetch(`${API}/inventory/${this.user}`).then(r=>r.json());
+    inv.forEach(i => {
+      const btn = document.querySelector(`button[data-item="${i.item}"]`);
+      if (btn) {
+        btn.disabled  = true;
+        btn.innerText = `✅ ${i.item}`;
+      }
+    });
+  },
+
+  // populate your inventory modal
+  async showInventory() {
+    if (!this.user) throw new Error("Not connected");
+    const inv = await fetch(`${API}/inventory/${this.user}`).then(r=>r.json());
+    const list = document.getElementById("inventory-list");
+    list.innerHTML = inv.map(i => `
+      <div class="card">
+        <img src="${i.image_url}" alt="${i.name}" />
+        <h4>${i.name}</h4>
+        <p>${i.description}</p>
+        <a href="${i.metadata_url}" target="_blank">View Metadata</a>
+      </div>
+    `).join("");
+    document.getElementById("inventory-modal").style.display = "block";
+  },
+
+  hideInventory() {
+    document.getElementById("inventory-modal").style.display = "none";
+  }
+};
+
+window.SDK = SDK;
