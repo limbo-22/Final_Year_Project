@@ -9,7 +9,12 @@ from flask_cors import CORS
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+# Tell Flask where to find static files and Jinja templates:
+app = Flask(
+    __name__,
+    static_folder="static",     # ← your index.html, game.js, style.css go here
+    template_folder="templates" # ← your sdk.js.j2 sits here
+)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Base directory of the project
@@ -65,6 +70,11 @@ def pin_json(data, name):
     res.raise_for_status()
     return f"ipfs://{res.json()['IpfsHash']}"
 
+@app.route("/")
+def serve_index():
+    # This will send /static/index.html when someone visits http://localhost:5000/
+    return app.send_static_file("index.html")
+
 # ── Serve the SDK template as JavaScript ─────────────────────────────────────
 @app.route("/sdk.js")
 def serve_sdk():
@@ -86,10 +96,6 @@ def get_contracts():
 # ------------------------
 # Routes: Assets & Metadata
 # ------------------------
-
-@app.route('/')
-def index():
-    return "Game Metadata Backend Running"
 
 
 @app.route('/metadata')

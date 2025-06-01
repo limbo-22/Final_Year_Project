@@ -1,0 +1,5 @@
+Future idea: publically setting up API, both frontend, backend using same folder, same api
+
+Use https, not http for safety
+
+start writing FYP, your second game!
