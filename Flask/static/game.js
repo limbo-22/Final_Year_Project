@@ -56,11 +56,27 @@ document.getElementById("inventory-close").onclick = () => SDK.hideInventory();
 
 // On page load: render room + auto-reconnect
 window.addEventListener("DOMContentLoaded", async () => {
-  displayRoom();
+  // 6.1) Tell SDK what to do when account changes:
+  SDK.onAccountChange = (newAddress) => {
+    currentUser = newAddress;
+    const statusEl = document.getElementById("wallet-status");
+    if (newAddress) {
+      statusEl.innerText = `Connected: ${newAddress}`;
+    } else {
+      statusEl.innerText = "Not connected";
+    }
+    // Update the mint buttons and room text
+    SDK.refreshButtons();
+    displayRoom();
+  };
+
+  // 6.2) Fire SDK.init() to pick up any existing connection
   await SDK.init();
-  if (SDK.user) {
-    document.getElementById("wallet-status")
-            .innerText = `Connected: ${SDK.user}`;
+
+  // 6.3) If SDK found a user already connected, the onAccountChange
+  //      block above will have run.  If not, we must at least show “Not connected”
+  if (!currentUser) {
+    document.getElementById("wallet-status").innerText = "Not connected";
     displayRoom();
   }
 });

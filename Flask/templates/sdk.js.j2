@@ -1,5 +1,8 @@
 // sdk.js.j2  — rendered as /sdk.js by Flask
 
+// 1) “API_URL” can be "" (relative paths) or "https://…/flask"
+//    You inject it from Flask’s render_template call.
+const API = "{{ API_URL }}";
 
 // 👑 SDK wrapper for your game UI
 const SDK = {
@@ -12,7 +15,7 @@ const SDK = {
 
   async loadConfig() {
     if (!this.contracts) {
-      const { contracts, abi } = await fetch(`/contracts`)
+      const { contracts, abi } = await fetch(`${API}/contracts`)
         .then(r => r.json());
       this.contracts = contracts;
       this.abi       = abi;
@@ -65,13 +68,14 @@ const SDK = {
       await this.refreshButtons();
       if (this.onAccountChange) this.onAccountChange(this.user);
     });
+
   },
 
   // mint via backend + safeMint on-chain
   async mint(itemType) {
     if (!this.user) throw new Error("Not connected");
     // 1️⃣ backend mint
-    let res = await fetch(`/mint/${itemType}`, {
+    let res = await fetch(`${API}/mint/${itemType}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user: this.user })
@@ -83,7 +87,7 @@ const SDK = {
     const { metadata_uri } = await res.json();
 
     // 2️⃣ on-chain safeMint
-    const cinfo = await fetch(`/contracts`).then(r=>r.json());
+    const cinfo = await fetch(`${API}/contracts`).then(r=>r.json());
     const contract = new ethers.Contract(
       cinfo.contracts[itemType], cinfo.abi, this.signer
     );
@@ -99,7 +103,7 @@ const SDK = {
       btn.innerText = btn.dataset.defaultText;
     });
     if (!this.user) return;
-    const inv = await fetch(`/inventory/${this.user}`).then(r=>r.json());
+    const inv = await fetch(`${API}/inventory/${this.user}`).then(r=>r.json());
     inv.forEach(i => {
       const btn = document.querySelector(`button[data-item="${i.item}"]`);
       if (btn) {
@@ -112,7 +116,7 @@ const SDK = {
   // populate your inventory modal
   async showInventory() {
     if (!this.user) throw new Error("Not connected");
-    const inv = await fetch(`/inventory/${this.user}`).then(r=>r.json());
+    const inv = await fetch(`${API}/inventory/${this.user}`).then(r=>r.json());
     const list = document.getElementById("inventory-list");
     list.innerHTML = inv.map(i => `
       <div class="card">

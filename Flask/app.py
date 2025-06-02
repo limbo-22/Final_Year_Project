@@ -81,8 +81,7 @@ def serve_sdk():
     return (
         render_template(
             "sdk.js.j2",
-            NFT_CONTRACTS=NFT_CONTRACTS,
-            CONTRACT_ABI=CONTRACT_ABI
+            API_URL="",   # empty = use relative paths in the browser
         ),
         200,
         {"Content-Type": "application/javascript"}
