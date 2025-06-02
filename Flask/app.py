@@ -73,7 +73,7 @@ def pin_json(data, name):
 @app.route("/")
 def serve_index():
     # This will send /static/index.html when someone visits http://localhost:5000/
-    return app.send_static_file("index.html")
+    return app.send_static_file("textgame/index.html")
 
 # ── Serve the SDK template as JavaScript ─────────────────────────────────────
 @app.route("/sdk.js")
@@ -91,6 +91,31 @@ def serve_sdk():
 @app.route('/contracts')
 def get_contracts():
     return jsonify({ 'contracts': NFT_CONTRACTS, 'abi': CONTRACT_ABI })
+
+@app.route("/tilegame/")
+def serve_tile_index():
+    """
+    When someone goes to /tilegame/ (with no filename),
+    serve static/tilegame/index.html
+    """
+    return send_from_directory(
+        os.path.join(BASE_DIR, "static", "tilegame"),
+        "index.html"
+    )
+
+@app.route("/tilegame/<path:filename>")
+def serve_tile_files(filename):
+    """
+    Serve any file under static/tilegame/ by matching the URL path.
+    Examples:
+      GET /tilegame/index.html   → static/tilegame/index.html
+      GET /tilegame/tilemap.json → static/tilegame/tilemap.json
+      GET /tilegame/assets/grass.png → static/tilegame/assets/grass.png
+    """
+    return send_from_directory(
+        os.path.join(BASE_DIR, "static", "tilegame"),
+        filename
+    )
 
 # ------------------------
 # Routes: Assets & Metadata

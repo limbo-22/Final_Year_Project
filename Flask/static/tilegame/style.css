@@ -1,0 +1,11 @@
+/* static/tilegame/style.css */
+body {
+  background: #111;
+  color: #eee;
+  font-family: sans-serif;
+  text-align: center;
+}
+canvas {
+  margin-top: 12px;
+  image-rendering: pixelated; /* for crisp 32×32 tiles */
+}
