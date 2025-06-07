@@ -1,10 +1,12 @@
 import os
 import json
 import requests
+import traceback
 from io import BytesIO
 from flask import Flask, jsonify, request, send_from_directory, url_for, render_template
 from dotenv import load_dotenv
 from flask_cors import CORS
+from web3 import Web3
 
 # Load environment variables
 load_dotenv()
@@ -27,13 +29,32 @@ PINATA_KEY    = os.getenv('PINATA_API_KEY')
 PINATA_SECRET = os.getenv('PINATA_SECRET_API_KEY')
 PINATA_URL    = os.getenv('PINATA_ENDPOINT')
 
+SHOP_OWNER_ADDRESS = os.getenv("SHOP_OWNER_ADDRESS")  # e.g. "0xAbc123…"
+SHOP_ITEMS = {
+    "sword":  { "price": 10 },
+    "potion": { "price":  5 },
+    "gem":    { "price": 20 },
+}
+
+# load your new ERC-20 ABI
+with open(os.path.join(BASE_DIR, 'erc20_abi.json')) as f:
+    GOLDCOIN_ABI = json.load(f)
+
 
 # Read these from your .env
 NFT_CONTRACTS = {
     "sword":  os.getenv("CURRENT_CONTRACT_ADDRESS"),
     "potion": os.getenv("CURRENT_CONTRACT_ADDRESS"),
     "gem":    os.getenv("CURRENT_CONTRACT_ADDRESS"),
+    "gold":   os.getenv("GOLDCOIN_CONTRACT"),
 }
+
+# 1) RPC provider URL
+INFURA_URL = os.getenv("INFURA_SEPOLIA_URL")  # in .env: your Infura/Alchemy HTTPS URL
+
+# 2) Create a Web3 instance
+w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
 # ------------------------
 # In-memory inventory store
 # ------------------------
@@ -82,6 +103,7 @@ def serve_sdk():
         render_template(
             "sdk.js.j2",
             API_URL="",   # empty = use relative paths in the browser
+            SHOP_OWNER_ADDRESS=SHOP_OWNER_ADDRESS
         ),
         200,
         {"Content-Type": "application/javascript"}
@@ -90,7 +112,10 @@ def serve_sdk():
 # Endpoint: contract config
 @app.route('/contracts')
 def get_contracts():
-    return jsonify({ 'contracts': NFT_CONTRACTS, 'abi': CONTRACT_ABI })
+    return jsonify({       
+        'contracts': NFT_CONTRACTS,
+        'erc721_abi': CONTRACT_ABI,
+        'erc20_abi':  GOLDCOIN_ABI })
 
 @app.route("/tilegame/")
 def serve_tile_index():
@@ -116,6 +141,40 @@ def serve_tile_files(filename):
         os.path.join(BASE_DIR, "static", "tilegame"),
         filename
     )
+    
+
+# ── NEW ROUTE: ERC-20 balance ─────────────────────────────────────────────
+@app.route('/balance/<token>/<user_address>')
+def balance(token, user_address):
+    # web3.py requires checksum addresses
+    try:
+        token_addr = w3.to_checksum_address(NFT_CONTRACTS[token])
+        user_addr  = w3.to_checksum_address(user_address)
+
+        contract = w3.eth.contract(address=token_addr, abi=GOLDCOIN_ABI)
+        raw      = contract.functions.balanceOf(user_addr).call()
+        dec      = contract.functions.decimals().call()
+        human    = raw / (10**dec)
+        return jsonify({ "raw": raw, "human": human })
+    except Exception as e:
+            # so you’ll see the full Python traceback in your console
+        traceback.print_exc()
+        return jsonify({ "error": str(e) }), 500
+    
+@app.route('/shop')
+def shop():
+    # build a small list of {item,price,image} entries
+    items = []
+    for item, cfg in SHOP_ITEMS.items():
+        img_url = url_for('get_asset_image',
+                          filename=f"{item}.png",
+                          _external=True)
+        items.append({
+            "item":  item,
+            "price": cfg["price"],
+            "image": img_url
+        })
+    return jsonify(items)
 
 # ------------------------
 # Routes: Assets & Metadata

@@ -3,6 +3,7 @@
 // 1) “API_URL” can be "" (relative paths) or "https://…/flask"
 //    You inject it from Flask’s render_template call.
 const API = "{{ API_URL }}";
+const SHOP_OWNER = "{{ SHOP_OWNER_ADDRESS }}".toLowerCase();
 
 // 👑 SDK wrapper for your game UI
 const SDK = {
@@ -10,15 +11,18 @@ const SDK = {
   signer:   null,
   user:     null,
   contracts:null,
-  abi:      null,
+  erc721_abi:      null,
+  erc20_abi:       null,
   onAccountChange: null,  // optional callback
 
+  // 1) Load both ABIs, once on startup
   async loadConfig() {
     if (!this.contracts) {
-      const { contracts, abi } = await fetch(`${API}/contracts`)
-        .then(r => r.json());
-      this.contracts = contracts;
-      this.abi       = abi;
+      const { contracts, erc721_abi, erc20_abi } =
+        await fetch(`${API}/contracts`).then(r=>r.json());
+      this.contracts   = contracts;
+      this.erc721Abi   = erc721_abi;
+      this.erc20Abi    = erc20_abi;
     }
   },
 
@@ -89,7 +93,7 @@ const SDK = {
     // 2️⃣ on-chain safeMint
     const cinfo = await fetch(`${API}/contracts`).then(r=>r.json());
     const contract = new ethers.Contract(
-      cinfo.contracts[itemType], cinfo.abi, this.signer
+      cinfo.contracts[itemType], this.erc721Abi, this.signer
     );
     const tx = await contract.safeMint(this.user, metadata_uri);
     await tx.wait();
@@ -131,7 +135,39 @@ const SDK = {
 
   hideInventory() {
     document.getElementById("inventory-modal").style.display = "none";
-  }
+  },
+
+
+  fetchBalance: async function(token, user_address) {
+    if (!user_address) throw new Error("Not connected");
+    // hit the new /balance/<token>/<user_address> route
+    const res = await fetch(`/balance/${token}/${user_address}`);
+    if (!res.ok) throw new Error("Failed to fetch balance");
+    return res.json();   // { raw:…, human:… }
+  },
+
+  /**
+   * 4.5 Purchase an item with ERC-20 gold, then mint the NFT.
+   */
+  async purchase(itemType, price) {
+    if (!this.user) throw new Error("Not connected");
+    if (this.user === SHOP_OWNER) 
+      throw new Error("You are the shop owner – cannot buy from yourself.");
+
+    // 1️⃣ On-chain ERC-20 transferFrom(user → shopOwner)
+    const goldAddr = this.contracts["gold"];
+    const gold     = new ethers.Contract(goldAddr, this.erc20Abi, this.signer);
+    const decimals = await gold.decimals();
+    // parseUnits requires a string
+    const amount   = ethers.parseUnits(price.toString(), decimals);
+    const tx       = await gold.transferFrom(this.user, SHOP_OWNER, amount);
+    await tx.wait();
+
+    // 2️⃣ Call existing mint endpoint
+    return this.mint(itemType);
+  },
+
+  
 };
 
 window.SDK = SDK;

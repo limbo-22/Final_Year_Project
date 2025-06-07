@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Phase 4: Tile Game – Map Display</title>
+  <title>Phase 4: Tile Game – Map Display / HUD</title>
   <link rel="stylesheet" href="/static/tilegame/style.css" />
 </head>
 <body>
@@ -10,10 +10,40 @@
   <!-- 10 tiles × 32px -->
   <!--  8 tiles × 32px -->
   <canvas id="gameCanvas"
-          width="320"   
-          height="256"  
+          width="640"   
+          height="512"  
           style="border:1px solid #555;">
   </canvas>
+
+    <!-- HUD on the right -->
+    <div id="hud">
+      <h3>Inventory</h3>
+      <button id="btn-connect-wallet">🔗 Connect Wallet</button>
+      <button id="btn-shop">🛒 Shop</button>
+      <ul>
+        <li>Swords: <span id="inv-sword">0</span></li>
+        <li>Potions: <span id="inv-potion">0</span></li>
+        <li>Gems: <span id="inv-gem">0</span></li>
+        <li>Goldcoin: <span id="inv-gold">0</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="shop-modal" style="display:none;
+                             position:fixed; top:10%; left:50%;
+                             transform:translateX(-50%);
+                             background:#222; padding:20px;
+                             border:1px solid #555;
+                             max-width:80%;">
+    <button id="shop-close">✖️ Close</button>
+    <div id="shop-list"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.umd.min.js"></script>
+  <script src="/sdk.js"></script>
+  <script src="/static/tilegame/hud.js"></script>
   <script src="/static/tilegame/game.js"></script>
+  <script src="/static/tilegame/shop.js"></script>
+
 </body>
 </html>
