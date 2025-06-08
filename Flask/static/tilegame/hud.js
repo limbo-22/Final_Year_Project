@@ -98,6 +98,51 @@ window.addEventListener("load", async function () {
   // 7) Once SDK has initialized (& possibly reconnected silently),
   //    fetch balances if already logged in:
   await SDK.init();
+
+  const adminPanel = document.getElementById("admin-panel");
+  if (SDK.user === SHOP_OWNER) {
+    // show it
+    adminPanel.style.display = "block";
+
+    // mint to arbitrary address
+    document.getElementById("btn-admin-mint").onclick = async () => {
+      try {
+        const to     = document.getElementById("admin-target").value.trim();
+        const amount= document.getElementById("admin-amount").value.trim();
+        if (!to || !amount) {
+          return alert("Please enter both target address and amount");
+        }
+        const dec = await SDK.getTokenDecimals("gold");
+        const raw = ethers.parseUnits(amount, dec);
+        await SDK.mintToken("gold", to, raw);
+        alert(`Minted ${amount} gold to ${to}`);
+      } catch (e) {
+        alert(`Mint failed: ${e.message}`);
+      }
+    };
+
+    // burn from arbitrary address
+    document.getElementById("btn-admin-burn").onclick = async () => {
+      try {
+        const from   = document.getElementById("admin-target").value.trim();
+        const amount= document.getElementById("admin-amount").value.trim();
+        if (!from || !amount) {
+          return alert("Please enter both target address and amount");
+        }
+        const dec = await SDK.getTokenDecimals("gold");
+        const raw = ethers.parseUnits(amount, dec);
+        await SDK.burnToken("gold", from, raw);
+        alert(`Burned ${amount} gold from ${from}`);
+      } catch (e) {
+        alert(`Burn failed: ${e.message}`);
+      }
+    };
+
+  } else {
+    // hide it for non-owners
+    adminPanel.style.display = "none";
+  }
+  
   if (SDK.user) {
     await fetchGoldBalance(SDK.user);
     await fetchInventoryCounts(SDK.user);
