@@ -27,6 +27,10 @@ window.addEventListener("load", () => {
           const price = Number(b.dataset.price);
           try {
             await SDK.purchase(item, price);
+            // let the HUD know what just happened:
+            window.dispatchEvent(new CustomEvent("itemPurchased", {
+              detail: { item, price }
+            }));
             alert(`🎉 You bought a ${item}!`);
             await SDK.refreshButtons();
             // immediately update HUD gold
