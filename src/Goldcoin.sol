@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 /// @title GameToken - Custom ERC-20 Token for Web3 Game
 /// @notice This token can be used as in-game currency (e.g., Gold Coins)
 contract GameToken is ERC20, Ownable {
-    constructor(uint256 initialSupply ) ERC20("GameToken", "GTKN") Ownable(msg.sender){
+    constructor(uint256 initialSupply ) ERC20("GameToken", "GTKN") Ownable(msg.sender) {
         _mint(msg.sender, initialSupply);
     }
 

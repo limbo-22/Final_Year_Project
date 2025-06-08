@@ -26,6 +26,15 @@ const SDK = {
     }
   },
 
+  // helper to give you an ethers.Contract
+  contractInstance(name) {
+    if (!this.signer) throw new Error("Not connected");
+    const addr = this.contracts[name];
+    // if it’s “gold” use the ERC20 ABI, otherwise ERC721
+    const abi  = name === 'gold' ? this.erc20Abi : this.erc721Abi;
+    return new ethers.Contract(addr, abi, this.signer);
+  },
+
   // connect MetaMask and return the lowercase address
   async connect() {
     if (!window.ethereum) throw new Error("MetaMask not found");
@@ -151,21 +160,69 @@ const SDK = {
    */
   async purchase(itemType, price) {
     if (!this.user) throw new Error("Not connected");
-    if (this.user === SHOP_OWNER) 
-      throw new Error("You are the shop owner – cannot buy from yourself.");
 
-    // 1️⃣ On-chain ERC-20 transferFrom(user → shopOwner)
-    const goldAddr = this.contracts["gold"];
-    const gold     = new ethers.Contract(goldAddr, this.erc20Abi, this.signer);
-    const decimals = await gold.decimals();
-    // parseUnits requires a string
-    const amount   = ethers.parseUnits(price.toString(), decimals);
-    const tx       = await gold.transferFrom(this.user, SHOP_OWNER, amount);
+    await this.loadConfig();
+
+    // 1) make a token‐contract instance
+    const token = new ethers.Contract(
+      this.contracts.gold,
+      this.erc20Abi,
+      this.signer
+    );
+
+    // 2) calculate raw units from human price
+    const dec       = await token.decimals();
+    const rawPrice  = ethers.parseUnits(price.toString(), dec);
+
+    // 3) check balance
+    const bal = await token.balanceOf(this.user);
+    if (bal < rawPrice) {
+      throw new Error(`You need ${price} gold to buy a ${itemType}`);
+    }
+
+    // 4) transfer directly to shop owner
+    const tx = await token.transfer(SHOP_OWNER, rawPrice);
     await tx.wait();
 
-    // 2️⃣ Call existing mint endpoint
+    // 5) now mint the NFT via your existing backend
     return this.mint(itemType);
   },
+
+  async mintToken(token, to, amount) {
+    if (!this.user) throw new Error("Not connected");
+    await this.loadConfig();
+    const c = new ethers.Contract(
+      this.contracts[token],
+      this.erc20Abi,
+      this.signer
+    );
+    const tx = await c.mint(to, amount);
+    await tx.wait();
+    return tx;
+  },
+
+  async burnToken(token, from, amount) {
+    if (!this.user) throw new Error("Not connected");
+    await this.loadConfig();
+    const c = new ethers.Contract(
+      this.contracts[token],
+      this.erc20Abi,
+      this.signer
+    );
+    const tx = await c.burn(from, amount);
+    await tx.wait();
+    return tx;
+  },
+
+  async getTokenDecimals(token) {
+    await this.loadConfig();
+    const c = new ethers.Contract(
+      this.contracts[token],
+      this.erc20Abi,
+      this.provider
+    );
+    return await c.decimals();
+  }
 
   
 };

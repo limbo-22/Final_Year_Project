@@ -28,34 +28,103 @@ window.addEventListener("load", async function () {
     }
   }
 
-
-  // 1) wire up your “Connect Wallet” button just like text-game did…
+  // 4) “Connect Wallet” button
   document.getElementById("btn-connect-wallet").onclick = async () => {
     try {
       await SDK.connect();
       await SDK.refreshButtons();
-      // optional: immediately fetch the gold balance
-      await SDK.fetchBalance("gold", SDK.user);
+      await fetchGoldBalance(SDK.user);
     } catch (e) {
       alert(e.message);
     }
   };
 
-  // 4) Wait a moment for the global “currentUser” to be set by tilegame.js or game.js.
-  //    We assume that tilegame.js calls SDK.connect() somewhere and sets window.currentUser.
-  //    If not, you’ll need to wire in a login event or pass `currentUser` explicitly.
-
-    // small delay so all UI is mounted before we paint the HUD
-    await SDK.init();
-
-    if (SDK.user) {
-      await SDK.refreshButtons();
-      await fetchGoldBalance(SDK.user);
-
+  // 5) Mint Gold (owner only, single-account shortcut)
+  document.getElementById("btn-mint-gold").onclick = async () => {
+    try {
+      const human = Number(prompt("How many gold to mint?"));
+      if (!human || human < 0) return;
+      const amt = ethers.parseUnits(String(human), 18);
+      const c   = SDK.contractInstance("gold");
+      await (await c.mint(SDK.user, amt)).wait();
+      const { human: newBal } = await SDK.fetchBalance("gold", SDK.user);
+      document.getElementById("inv-gold").innerText = newBal;
+    } catch (e) {
+      alert(e.message);
     }
-    // keep polling so HUD updates if user spends or earns gold
-    setInterval(() => fetchGoldBalance(SDK.user), 10_000);
-    // initial paint (0 until the first fetch arrives)
-    renderHUD();
+  };
 
+  // 6) Burn Gold (owner only, single-account shortcut)
+  document.getElementById("btn-burn-gold").onclick = async () => {
+    try {
+      const human = Number(prompt("How many gold to burn?"));
+      if (!human || human < 0) return;
+      const amt = ethers.parseUnits(String(human), 18);
+      const c   = SDK.contractInstance("gold");
+      await (await c.burn(SDK.user, amt)).wait();
+      const { human: newBal } = await SDK.fetchBalance("gold", SDK.user);
+      document.getElementById("inv-gold").innerText = newBal;
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  // ────────────────────────────────────────────────
+  // 7) Initialize SDK & then wire up the *full* Admin Panel
+  await SDK.init();
+
+  const adminPanel = document.getElementById("admin-panel");
+  if (SDK.user === SHOP_OWNER) {
+    // show it
+    adminPanel.style.display = "block";
+
+    // mint to arbitrary address
+    document.getElementById("btn-admin-mint").onclick = async () => {
+      try {
+        const to     = document.getElementById("admin-target").value.trim();
+        const amount= document.getElementById("admin-amount").value.trim();
+        if (!to || !amount) {
+          return alert("Please enter both target address and amount");
+        }
+        const dec = await SDK.getTokenDecimals("gold");
+        const raw = ethers.parseUnits(amount, dec);
+        await SDK.mintToken("gold", to, raw);
+        alert(`Minted ${amount} gold to ${to}`);
+      } catch (e) {
+        alert(`Mint failed: ${e.message}`);
+      }
+    };
+
+    // burn from arbitrary address
+    document.getElementById("btn-admin-burn").onclick = async () => {
+      try {
+        const from   = document.getElementById("admin-target").value.trim();
+        const amount= document.getElementById("admin-amount").value.trim();
+        if (!from || !amount) {
+          return alert("Please enter both target address and amount");
+        }
+        const dec = await SDK.getTokenDecimals("gold");
+        const raw = ethers.parseUnits(amount, dec);
+        await SDK.burnToken("gold", from, raw);
+        alert(`Burned ${amount} gold from ${from}`);
+      } catch (e) {
+        alert(`Burn failed: ${e.message}`);
+      }
+    };
+
+  } else {
+    // hide it for non-owners
+    adminPanel.style.display = "none";
+  }
+  // ────────────────────────────────────────────────
+
+  // 8) Now resume normal HUD flow
+  if (SDK.user) {
+    await SDK.refreshButtons();
+    await fetchGoldBalance(SDK.user);
+  }
+  setInterval(() => fetchGoldBalance(SDK.user), 10_000);
+  renderHUD();
 });
+
+

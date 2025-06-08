@@ -20,6 +20,8 @@
       <h3>Inventory</h3>
       <button id="btn-connect-wallet">🔗 Connect Wallet</button>
       <button id="btn-shop">🛒 Shop</button>
+      <button id="btn-mint-gold">Mint Gold</button>
+      <button id="btn-burn-gold">Burn Gold</button>
       <ul>
         <li>Swords: <span id="inv-sword">0</span></li>
         <li>Potions: <span id="inv-potion">0</span></li>
@@ -27,6 +29,14 @@
         <li>Goldcoin: <span id="inv-gold">0</span></li>
       </ul>
     </div>
+  </div>
+
+  <div id="admin-panel" style="display:none; margin:1em 0; padding:1em; border:1px solid #888; background:#222;">
+    <h3>⚙️ Admin: Mint/Burn Gold</h3>
+    <input id="admin-target" placeholder="0xABC…" style="width:60%;" />
+    <input id="admin-amount" placeholder="Amount" type="number" style="width:20%;" />
+    <button id="btn-admin-mint">Mint Gold</button>
+    <button id="btn-admin-burn">Burn Gold</button>
   </div>
 
   <div id="shop-modal" style="display:none;
@@ -38,6 +48,7 @@
     <button id="shop-close">✖️ Close</button>
     <div id="shop-list"></div>
   </div>
+
 
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.6.0/dist/ethers.umd.min.js"></script>
   <script src="/sdk.js"></script>
